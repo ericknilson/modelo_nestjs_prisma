@@ -1,35 +1,30 @@
-import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
+import { HttpException, HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
-import { PrismaService } from '../prisma/prisma.service';
 import { PaginationDto } from 'src/common/dto/pagination.dto';
 import { PayloadTokenDto } from 'src/auth/dto/payload-token.dto';
 import { ResponseTaskDto } from './dto/response-task.dto';
+import { TasksRepository, TASKS_REPOSITORY } from './tasks.repository';
 
 @Injectable()
 export class TasksService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    @Inject(TASKS_REPOSITORY) private readonly tasksRepository: TasksRepository,
+  ) {}
 
   async findAll(paginationDto?: PaginationDto): Promise<ResponseTaskDto[]> {
     const { limit = 10, offset = 0 } = paginationDto ?? {};
 
-    const allTasks = await this.prisma.task.findMany({
-      take: limit,
-      skip: offset,
-      orderBy: {
-        createdAt: 'desc',
-      },
+    const allTasks = await this.tasksRepository.findAll({
+      limit,
+      offset,
     });
 
     return allTasks;
   }
 
   async findOne(id: string): Promise<ResponseTaskDto> {
-    const task = await this.prisma.task.findFirst({
-      where: {
-        id: id,
-      },
-    });
+    const task = await this.tasksRepository.findById(id);
 
     if (task?.name) return task;
 
@@ -44,13 +39,11 @@ export class TasksService {
     tokenPayload: PayloadTokenDto,
   ): Promise<ResponseTaskDto> {
     try {
-      const newTask = await this.prisma.task.create({
-        data: {
-          name: createTaskDto.name,
-          description: createTaskDto.description,
-          completed: false,
-          userId: tokenPayload.sub,
-        },
+      const newTask = await this.tasksRepository.create({
+        name: createTaskDto.name,
+        description: createTaskDto.description,
+        completed: false,
+        userId: tokenPayload.sub,
       });
 
       return newTask;
@@ -69,11 +62,7 @@ export class TasksService {
     tokenPayload: PayloadTokenDto,
   ): Promise<ResponseTaskDto> {
     try {
-      const findTask = await this.prisma.task.findFirst({
-        where: {
-          id: id,
-        },
-      });
+      const findTask = await this.tasksRepository.findById(id);
 
       if (!findTask) {
         throw new HttpException(
@@ -89,19 +78,14 @@ export class TasksService {
         );
       }
 
-      const task = await this.prisma.task.update({
-        where: {
-          id: findTask.id,
-        },
-        data: {
-          name: updateTaskDto?.name ? updateTaskDto?.name : findTask.name,
-          description: updateTaskDto?.description
-            ? updateTaskDto?.description
-            : findTask.description,
-          completed: updateTaskDto?.completed
-            ? updateTaskDto?.completed
-            : findTask.completed,
-        },
+      const task = await this.tasksRepository.update(findTask.id, {
+        name: updateTaskDto?.name ? updateTaskDto?.name : findTask.name,
+        description: updateTaskDto?.description
+          ? updateTaskDto?.description
+          : findTask.description,
+        completed: updateTaskDto?.completed
+          ? updateTaskDto?.completed
+          : findTask.completed,
       });
 
       return task;
@@ -115,11 +99,7 @@ export class TasksService {
 
   async delete(id: string, tokenPayload: PayloadTokenDto) {
     try {
-      const findTask = await this.prisma.task.findFirst({
-        where: {
-          id: id,
-        },
-      });
+      const findTask = await this.tasksRepository.findById(id);
 
       if (!findTask) {
         throw new HttpException(
@@ -135,11 +115,7 @@ export class TasksService {
         );
       }
 
-      await this.prisma.task.delete({
-        where: {
-          id: findTask.id,
-        },
-      });
+      await this.tasksRepository.delete(findTask.id);
 
       return {
         message: 'Tarefa deletada com sucesso!',
